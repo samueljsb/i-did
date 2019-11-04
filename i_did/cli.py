@@ -23,7 +23,7 @@ def remove_extra_newlines(message):
 
 
 @click.group()
-def i_did():
+def cli():
     """Keep track of what you did today."""
     # Make sure the directory for storing files exists.
     if not STORE_DIR.is_dir():
@@ -33,7 +33,7 @@ def i_did():
         STORE_DIR.mkdir()
 
 
-@i_did.command()
+@cli.command()
 @click.option("--message", "-m", nargs=1)
 def new(message):
     """Add an item to the list of things you've done.
@@ -66,7 +66,7 @@ def new(message):
     click.echo("New item added.", err=True)
 
 
-@i_did.command()
+@cli.command()
 @click.option("-v", "--verbose", count=True)
 def show(verbose):
     """Show what you've already done this week."""
