@@ -1,12 +1,11 @@
 """Tool to keep track of what you did today."""
 import datetime
-import json
-from pathlib import Path
 
 import click
 
+from . import datastore
+
 EDITOR = "vim --cmd ':set tw=79'"
-STORE_DIR = Path("~/.i-did").expanduser()
 
 MARKER = (
     "# ------------------------ >8 ------------------------\n"
@@ -15,22 +14,10 @@ MARKER = (
 )
 
 
-def remove_extra_newlines(message):
-    """Limit the number of newlines in a message to 2."""
-    while "\n\n\n" in message:
-        message = message.replace("\n\n\n", "\n\n")
-    return message
-
-
 @click.group()
 def cli():
     """Keep track of what you did today."""
-    # Make sure the directory for storing files exists.
-    if not STORE_DIR.is_dir():
-        assert (
-            not STORE_DIR.exists()
-        ), f"{STORE_DIR} already exists but is not a directory"
-        STORE_DIR.mkdir()
+    datastore.init()
 
 
 @cli.command()
@@ -49,20 +36,8 @@ def new(message):
             click.echo("No message to add", err=True)
             return
 
-    # Create a file for today if it does not exist.
-    today = datetime.date.today()
-    today_file = STORE_DIR.joinpath(f"{today.isoformat()}.json")
-    if not today_file.exists():
-        with open(today_file, "w") as fd:
-            json.dump({"items": []}, fd)
-
     # Add the item to today's file
-    with open(today_file, "r") as fd:
-        today_data = json.loads(fd.read())
-    new_item = {"message": message, "time": datetime.datetime.now().isoformat()}
-    today_data["items"].append(new_item)
-    with open(today_file, "w") as fd:
-        json.dump(today_data, fd)
+    datastore.write_item(datetime.datetime.now(), message)
     click.echo("New item added.", err=True)
 
 
@@ -70,7 +45,7 @@ def new(message):
 @click.option("-v", "--verbose", count=True)
 def show(verbose):
     """Show what you've already done this week."""
-    today = datetime.date.today()
+    today = datetime.datetime.today()
 
     # Get range of days to show.
     num_days = 7
@@ -79,25 +54,21 @@ def show(verbose):
     # Show data for each day.
     for day in days:
         # Get data from file.
-        day_file = STORE_DIR.joinpath(f"{day.isoformat()}.json")
-        if not day_file.exists():
+        items = datastore.get_items(day)
+        if not items:
             continue
-        else:
-            with open(day_file, "r") as fd:
-                data = json.loads(fd.read())
 
         # Format data.
         day_str = day.strftime("%A %B %d, %Y")
         output = f"\n{day_str}\n{'-'*len(day_str)}\n\n"
-        data["items"].sort(key=lambda item: item["time"])
-        for item in data["items"]:
+        items.sort(key=lambda item: item["time"])
+        for item in items:
             time = datetime.datetime.fromisoformat(item["time"])
             time_str = click.style(time.strftime("%H:%M"), fg="yellow")
-            message = remove_extra_newlines(item["message"])
-            message_header = message.split("\n", 1)[0]
+            message_header = item["message"].split("\n", 1)[0]
             output += f"{time_str}  {message_header}" + "\n"
             if verbose:
-                message_body = message.split("\n")[1:]
+                message_body = item["message"].split("\n")[1:]
                 for line in message_body:
                     output += f"           {line}\n"
                 if message_body:
